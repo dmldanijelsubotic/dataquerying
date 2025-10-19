@@ -1,0 +1,16 @@
+# Project
+Django==5.2.7
+djangorestframework==3.16.1
+django-filter==25.2
+drf-spectacular==0.28.0
+python-dotenv==1.1.1
+
+# Linters
+flake8==7.3.0
+black==25.9.0
+bandit==1.8.6
+pytest==8.4.2
+pytest-django==4.11.1
+coverage==7.10.7
+pytest-cov==7.0.0
+radon==6.0.1
