@@ -9,10 +9,7 @@ from rest_framework import status
 from rest_framework.serializers import ValidationError
 
 from .models import Tag, Post, Comment
-from .serializers import (
-    PostSerializer,
-    TagSerializer
-)
+from .serializers import PostSerializer, TagSerializer
 from .filters import PostFilter
 from .views import PostViewSet, UserDetailSet
 
@@ -238,3 +235,4 @@ class DRFIntegrationTest(APITestCase):
         response_get = self.client.get(f"{self.users_url}/{self.user1.id}")
         self.assertEqual(response_get.status_code, status.HTTP_200_OK)
         self.assertEqual(response_get.data["username"], "creator")
+
