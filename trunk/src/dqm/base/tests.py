@@ -235,4 +235,3 @@ class DRFIntegrationTest(APITestCase):
         response_get = self.client.get(f"{self.users_url}/{self.user1.id}")
         self.assertEqual(response_get.status_code, status.HTTP_200_OK)
         self.assertEqual(response_get.data["username"], "creator")
-
