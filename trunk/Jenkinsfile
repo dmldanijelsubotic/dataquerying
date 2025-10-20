@@ -1,0 +1,123 @@
+pipeline {
+    agent any
+    environment {
+        VENV_DIR = "venv"
+        PYTHON = "${env.WORKSPACE}\\${VENV_DIR}\\Scripts\\python.exe"
+    }
+    triggers {
+        cron('0 */12 * * *') // every 12 hours
+    }
+    stages {
+    stage('Prepare environment') {
+        steps {
+            bat """
+
+                echo Preparing .env for Django...
+                if exist trunk\\src\\dqm\\.env.ci (
+                    copy /Y trunk\\src\\dqm\\.env.ci trunk\\src\\dqm\\.env
+                    echo Copied Django environment file.
+                ) else (
+                    echo WARNING: .env.example not found, using default or local .env
+                )
+            """
+        }
+    }
+
+    stage('Checkout') {
+      steps {
+        cleanWs()
+        bat """
+          if exist .git (
+            echo "Already a git repo, pulling..."
+            git -C "%WORKSPACE%" pull || exit /b 0
+          ) else (
+            echo "Cloning local repo..."
+            git clone  "https://github.com/dmldanijelsubotic/dataquerying" .
+          )
+        """
+      }
+    }
+
+        stage('Build') {
+            steps {
+                echo "Build"
+                bat """
+                "C:\\Users\\danij\\AppData\\Local\\Programs\\Python\\Python313\\python.exe" -m venv %VENV_DIR%
+                call %VENV_DIR%\\Scripts\\activate
+                "${PYTHON}" -m pip install --upgrade pip
+                "${PYTHON}" -m pip install -r trunk\\requirements.txt
+
+                cd trunk\\src\\dqm
+                "${PYTHON}" manage.py migrate
+                """
+            }
+        }
+
+    stage('Run tests') {
+        steps {
+            bat """
+                  call %VENV_DIR%\\Scripts\\activate
+
+                  cd %WORKSPACE%
+                  mkdir reports 2>nul
+                  cd trunk\\src\\dqm
+
+                  echo Running Django tests with coverage...
+                  "${PYTHON}" -m coverage run --omit="${VENV_DIR}/*,*/migrations/*,*/settings.py,*/manage.py" manage.py test
+
+                  echo Generating coverage reports...
+                  "${PYTHON}" -m coverage xml -o "%WORKSPACE%\\reports\\coverage.xml"
+
+                  echo Generate HTML report for detailed code review
+                  "${PYTHON}" -m coverage html -d "%WORKSPACE%\\reports\\htmlcov"
+                """
+        }
+        post {
+            always {
+                archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
+            }
+        }
+    }
+    stage('Lint') {
+      steps {
+        bat """
+          call %VENV_DIR%\\Scripts\\activate
+          cd trunk\\src\\dqm
+
+          echo Checking formatting with black...
+          black . --check --diff > "%WORKSPACE%\\reports\\black.txt" || set LINT_FAIL=1
+
+          echo Checking flake8
+          flake8 . --select=E9,F63,F7,F82 --output-file="%WORKSPACE%\\reports\\flake8.txt" || set LINT_FAIL=1
+
+          echo Running bandit (security)...
+          bandit -r . -f txt -o "%WORKSPACE%\\reports\\bandit.txt" -x tests || echo "bandit finished with issues"
+
+          echo Running Radon metrics...
+          radon cc . -a > "%WORKSPACE%\\reports\\radon_cc.txt"
+          radon mi . -s > "%WORKSPACE%\\reports\\radon_mi.txt"
+          radon raw . > "%WORKSPACE%\\reports\\radon_raw.txt"
+
+          if defined LINT_FAIL (
+            echo "Lint failed"
+            type "%WORKSPACE%\\reports\\flake8.txt"
+            exit /b 1
+          )
+        """
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'reports/*.txt, reports/*.xml, reports/htmlcov/**', allowEmptyArchive: true
+        }
+      }
+    }
+    }
+
+    post {
+        always {
+            echo 'Cleaning up workspace...'
+            cleanWs()
+        }
+    }
+}
+
